@@ -1,4 +1,4 @@
-version: '2.1'
+version: '3'
 
 networks:
   monitor-net:
@@ -7,8 +7,33 @@ networks:
 volumes:
     prometheus_data: {}
     grafana_data: {}
+    letsencrypt: {}
+    letsencrypt_backups: {}
+    dhparam_cache: {}
 
 services:
+
+  ssl_reverse_proxy:
+    image: colbygk/lets-nginx:latest
+    container_name: ssl_reverse_proxy
+    restart: unless-stopped
+    environment:
+      - EMAIL=colbygk@mit.edu
+      - DOMAIN=yori.media.mit.edu
+      - UPSTREAM=grafana:3000
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - letsencrypt_backups:/var/lib/letsencrypt
+      - dhparam_cache:/cache
+    networks:
+      - monitor-net
+    depends_on:
+      - grafana
+    labels:
+      org.label-schema.group: "monitoring"
 
   prometheus:
     image: prom/prometheus:v2.0.0
@@ -72,12 +97,16 @@ services:
     image: google/cadvisor:v0.28.3
     container_name: cadvisor
     volumes:
+      - /proc:/host/proc:ro
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
     restart: unless-stopped
+    devices:
+      - "/dev/zfs:/dev/zfs"
+      - "/dev/kmsg:/dev/kmsg"
     expose:
       - 8080
     networks:
@@ -96,7 +125,7 @@ services:
     entrypoint: /setup.sh
     environment:
       - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-VuUUTQtMLaiXJybcod8R}
       - GF_USERS_ALLOW_SIGN_UP=false
     restart: unless-stopped
     expose:
@@ -117,9 +146,10 @@ services:
       - ./caddy/:/etc/caddy/
     environment:
       - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-VuUUTQtMLaiXJybcod8R}
     restart: unless-stopped
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
+
